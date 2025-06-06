@@ -270,7 +270,13 @@
         </div>
 
         <div class="score-board">
-            <h3>🏆 Historique des Scores</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3>🏆 Scores en ligne</h3>
+                <div>
+                    <span id="online-status" style="padding: 5px 10px; border-radius: 15px; font-size: 12px;">🔄 Chargement...</span>
+                    <button id="refresh-scores" style="padding: 5px 10px; font-size: 12px; margin-left: 10px;">🔄 Actualiser</button>
+                </div>
+            </div>
             <div id="score-history"></div>
         </div>
     </div>
@@ -285,7 +291,11 @@
         let countdownInterval;
         let currentScore = 0;
         let playerName = '';
-        let gameHistory = JSON.parse(localStorage.getItem('rocketGameHistory') || '[]');
+        let gameHistory = [];
+        
+        // Configuration API
+        const API_URL = 'https://675292b369dc1669ec19cdf7.mockapi.io/api/v1/scores';
+        let isOnline = true;
 
         // Éléments DOM
         const starterDisplay = document.getElementById("starter");
@@ -298,9 +308,74 @@
         const currentScoreDisplay = document.getElementById("current-score");
         const scoreHistoryDisplay = document.getElementById("score-history");
         const confettiContainer = document.getElementById("confetti-container");
+        const onlineStatus = document.getElementById("online-status");
+        const refreshButton = document.getElementById("refresh-scores");
 
-        // Initialisation
-        displayScoreHistory();
+        // Fonctions API
+        async function loadScoresFromAPI() {
+            try {
+                onlineStatus.textContent = '🔄 Chargement...';
+                onlineStatus.style.background = '#ffa502';
+                
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error('Erreur réseau');
+                
+                const scores = await response.json();
+                gameHistory = scores.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                
+                onlineStatus.textContent = '🟢 En ligne';
+                onlineStatus.style.background = '#2ed573';
+                isOnline = true;
+                
+                displayScoreHistory();
+            } catch (error) {
+                console.error('Erreur chargement scores:', error);
+                onlineStatus.textContent = '🔴 Hors ligne';
+                onlineStatus.style.background = '#ff4757';
+                isOnline = false;
+                
+                // Charger les scores locaux en fallback
+                gameHistory = JSON.parse(localStorage.getItem('rocketGameHistory') || '[]');
+                displayScoreHistory();
+            }
+        }
+
+        async function saveScoreToAPI(scoreData) {
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(scoreData)
+                });
+                
+                if (!response.ok) throw new Error('Erreur sauvegarde');
+                
+                const savedScore = await response.json();
+                
+                // Recharger les scores après sauvegarde
+                await loadScoresFromAPI();
+                
+                return savedScore;
+            } catch (error) {
+                console.error('Erreur sauvegarde score:', error);
+                
+                // Sauvegarde locale en fallback
+                const localHistory = JSON.parse(localStorage.getItem('rocketGameHistory') || '[]');
+                localHistory.unshift(scoreData);
+                if (localHistory.length > 15) {
+                    localHistory.splice(15);
+                }
+                localStorage.setItem('rocketGameHistory', JSON.stringify(localHistory));
+                
+                onlineStatus.textContent = '🔴 Hors ligne';
+                onlineStatus.style.background = '#ff4757';
+                isOnline = false;
+                
+                throw error;
+            }
+        }
 
         function startGame() {
             if (!playerName.trim()) {
@@ -502,18 +577,15 @@
                 score: score,
                 won: won,
                 date: new Date().toLocaleString('fr-FR'),
-                timeRemaining: won ? timeLeft.toFixed(1) : 0
+                timeRemaining: won ? timeLeft.toFixed(1) : 0,
+                createdAt: new Date().toISOString()
             };
             
-            gameHistory.unshift(gameData);
-            
-            // Garder seulement les 15 derniers scores
-            if (gameHistory.length > 15) {
-                gameHistory = gameHistory.slice(0, 15);
-            }
-            
-            localStorage.setItem('rocketGameHistory', JSON.stringify(gameHistory));
-            displayScoreHistory();
+            // Sauvegarder en ligne
+            saveScoreToAPI(gameData).catch(() => {
+                // En cas d'erreur, afficher un message
+                console.log('Score sauvegardé localement uniquement');
+            });
         }
 
         function displayScoreHistory() {
@@ -522,18 +594,28 @@
                 return;
             }
             
-            scoreHistoryDisplay.innerHTML = gameHistory.map((game, index) => `
-                <div class="score-item">
-                    <span><strong>${game.player}</strong> - ${game.date}</span>
-                    <span>${game.won ? '🏆' : '💥'} ${game.score} pts ${game.won ? `(${game.timeRemaining}s)` : ''}</span>
-                </div>
-            `).join('');
+            // Afficher seulement les 20 meilleurs scores
+            const topScores = gameHistory.slice(0, 20);
+            
+            scoreHistoryDisplay.innerHTML = topScores.map((game, index) => {
+                const rank = index + 1;
+                const trophy = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}.`;
+                const gameDate = game.date || new Date(game.createdAt).toLocaleString('fr-FR');
+                
+                return `
+                    <div class="score-item">
+                        <span><strong>${trophy} ${game.player}</strong> - ${gameDate}</span>
+                        <span>${game.won ? '🏆' : '💥'} ${game.score} pts ${game.won ? `(${game.timeRemaining}s)` : ''}</span>
+                    </div>
+                `;
+            }).join('');
         }
 
         // Événements
         button.addEventListener("click", moveRocket);
         restartButton.addEventListener("click", restartWithNewPlayer);
         startGameButton.addEventListener("click", initializeGame);
+        refreshButton.addEventListener("click", loadScoresFromAPI);
         
         // Validation du pseudo avec Entrée
         playerNameInput.addEventListener("keypress", (e) => {
@@ -543,7 +625,7 @@
         });
 
         // Initialisation
-        displayScoreHistory();
+        loadScoresFromAPI();
         playerNameInput.focus();
 
         // Support clavier pour le jeu
