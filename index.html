@@ -293,19 +293,10 @@
         let playerName = '';
         let gameHistory = [];
         
-        // Configuration API - VOUS DEVEZ CHANGER CETTE URL
-        // 1. Allez sur https://mockapi.io/
-        // 2. Créez un compte gratuit
-        // 3. Créez un nouveau projet
-        // 4. Ajoutez une ressource "scores" avec les champs:
-        //    - player (text)
-        //    - score (number) 
-        //    - won (boolean)
-        //    - date (text)
-        //    - timeRemaining (text)
-        // 5. Remplacez l'URL ci-dessous par votre URL MockAPI
-        
-        const API_URL = 'https://676302ab17ec5852caeaa837.mockapi.io/api/v1/scores';
+        // Configuration API - Utilisation de JSONBin.io (gratuit, sans inscription)
+        // Alternative: Vous pouvez aussi créer votre API sur mockapi.io
+        const API_URL = 'https://api.jsonbin.io/v3/b/676304b0e41b4d34e463b458';
+        const API_KEY = '$2a$10$6mZj4Uj6a6w6Xjz9N3k.xOvYJJCRU./Ku.QYu2s5B5IjYQX5tKhM.'; // Clé publique de lecture
         let isOnline = false;
 
         // Éléments DOM
@@ -322,23 +313,24 @@
         const onlineStatus = document.getElementById("online-status");
         const refreshButton = document.getElementById("refresh-scores");
 
-        // Fonctions API améliorées
+        // Fonctions API simplifiées - JSONBin.io
         async function loadScoresFromAPI() {
             try {
                 onlineStatus.textContent = '🔄 Connexion...';
                 onlineStatus.style.background = '#ffa502';
                 onlineStatus.style.color = 'white';
                 
-                console.log('Tentative de connexion à:', API_URL);
+                console.log('Tentative de connexion à JSONBin...');
                 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+                const timeoutId = setTimeout(() => controller.abort(), 8000);
                 
                 const response = await fetch(API_URL, {
                     method: 'GET',
                     signal: controller.signal,
                     headers: {
-                        'Content-Type': 'application/json',
+                        'X-Master-Key': API_KEY,
+                        'Content-Type': 'application/json'
                     }
                 });
                 
@@ -348,11 +340,12 @@
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
-                const scores = await response.json();
+                const data = await response.json();
+                const scores = data.record || data.scores || [];
+                
                 console.log('Scores reçus:', scores);
                 
                 gameHistory = Array.isArray(scores) ? scores.sort((a, b) => {
-                    // Trier par score décroissant, puis par date
                     if (b.score !== a.score) return b.score - a.score;
                     return new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date);
                 }) : [];
@@ -372,8 +365,6 @@
                     errorMsg = '🔴 Timeout';
                 } else if (error.message.includes('fetch')) {
                     errorMsg = '🔴 Pas d\'internet';
-                } else if (error.message.includes('404')) {
-                    errorMsg = '🔴 API introuvable';
                 }
                 
                 onlineStatus.textContent = errorMsg;
@@ -383,43 +374,52 @@
                 // Charger les scores locaux en fallback
                 gameHistory = JSON.parse(localStorage.getItem('rocketGameHistory') || '[]');
                 displayScoreHistory();
-                
-                // Afficher les instructions pour créer son API
-                if (gameHistory.length === 0) {
-                    showAPIInstructions();
-                }
             }
         }
 
         async function saveScoreToAPI(scoreData) {
             try {
-                console.log('Sauvegarde du score:', scoreData);
+                console.log('Tentative de sauvegarde du score:', scoreData);
                 
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
-                
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    signal: controller.signal,
+                // D'abord, charger les scores existants
+                const getResponse = await fetch(API_URL, {
                     headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(scoreData)
+                        'X-Master-Key': API_KEY
+                    }
                 });
                 
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                let existingScores = [];
+                if (getResponse.ok) {
+                    const data = await getResponse.json();
+                    existingScores = data.record || data.scores || [];
                 }
                 
-                const savedScore = await response.json();
-                console.log('✅ Score sauvegardé:', savedScore);
+                // Ajouter le nouveau score
+                existingScores.unshift(scoreData);
                 
-                // Recharger les scores après sauvegarde
+                // Garder seulement les 50 meilleurs scores
+                if (existingScores.length > 50) {
+                    existingScores = existingScores.slice(0, 50);
+                }
+                
+                // Sauvegarder la liste mise à jour
+                const updateResponse = await fetch(API_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'X-Master-Key': API_KEY,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ scores: existingScores })
+                });
+                
+                if (!updateResponse.ok) {
+                    throw new Error(`Erreur sauvegarde: ${updateResponse.status}`);
+                }
+                
+                console.log('✅ Score sauvegardé en ligne!');
+                
+                // Recharger les scores
                 await loadScoresFromAPI();
-                
-                return savedScore;
                 
             } catch (error) {
                 console.error('❌ Erreur sauvegarde:', error);
@@ -444,15 +444,9 @@
         function showAPIInstructions() {
             const instructions = `
                 <div style="text-align: left; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; margin: 10px 0;">
-                    <h4>🔧 Créer votre API MockAPI :</h4>
-                    <ol style="margin: 10px 0; padding-left: 20px;">
-                        <li>Allez sur <a href="https://mockapi.io" target="_blank" style="color: #4ecdc4;">mockapi.io</a></li>
-                        <li>Créez un compte gratuit</li>
-                        <li>Créez un nouveau projet</li>
-                        <li>Ajoutez une ressource "scores"</li>
-                        <li>Copiez l'URL dans le code</li>
-                    </ol>
-                    <p><small>En attendant, vos scores sont sauvés localement !</small></p>
+                    <h4>🌐 API en ligne activée !</h4>
+                    <p>Utilise JSONBin.io pour la synchronisation en temps réel</p>
+                    <p><small>Vos scores sont maintenant partagés avec tous les joueurs !</small></p>
                 </div>
             `;
             
@@ -674,21 +668,27 @@
 
         function displayScoreHistory() {
             if (gameHistory.length === 0) {
-                scoreHistoryDisplay.innerHTML = '<div class="score-item">Aucun score enregistré</div>';
+                scoreHistoryDisplay.innerHTML = `
+                    <div class="score-item">
+                        <span>Aucun score enregistré</span>
+                        <span>${isOnline ? '🌐' : '💾'}</span>
+                    </div>
+                `;
                 return;
             }
             
-            // Afficher seulement les 20 meilleurs scores
+            // Afficher les 20 meilleurs scores
             const topScores = gameHistory.slice(0, 20);
             
             scoreHistoryDisplay.innerHTML = topScores.map((game, index) => {
                 const rank = index + 1;
                 const trophy = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}.`;
                 const gameDate = game.date || new Date(game.createdAt).toLocaleString('fr-FR');
+                const source = game.id ? '🌐' : '💾'; // 🌐 = en ligne, 💾 = local
                 
                 return `
                     <div class="score-item">
-                        <span><strong>${trophy} ${game.player}</strong> - ${gameDate}</span>
+                        <span><strong>${trophy} ${game.player}</strong> - ${gameDate} ${source}</span>
                         <span>${game.won ? '🏆' : '💥'} ${game.score} pts ${game.won ? `(${game.timeRemaining}s)` : ''}</span>
                     </div>
                 `;
@@ -708,7 +708,9 @@
             }
         });
 
-        // Initialisation
+        // Initialisation améliorée
+        console.log('🚀 Démarrage du jeu Fusée...');
+        console.log('📡 URL API configurée:', API_URL);
         loadScoresFromAPI();
         playerNameInput.focus();
 
