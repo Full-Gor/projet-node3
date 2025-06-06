@@ -293,9 +293,20 @@
         let playerName = '';
         let gameHistory = [];
         
-        // Configuration API
-        const API_URL = 'https://675292b369dc1669ec19cdf7.mockapi.io/api/v1/scores';
-        let isOnline = true;
+        // Configuration API - VOUS DEVEZ CHANGER CETTE URL
+        // 1. Allez sur https://mockapi.io/
+        // 2. Créez un compte gratuit
+        // 3. Créez un nouveau projet
+        // 4. Ajoutez une ressource "scores" avec les champs:
+        //    - player (text)
+        //    - score (number) 
+        //    - won (boolean)
+        //    - date (text)
+        //    - timeRemaining (text)
+        // 5. Remplacez l'URL ci-dessous par votre URL MockAPI
+        
+        const API_URL = 'https://676302ab17ec5852caeaa837.mockapi.io/api/v1/scores';
+        let isOnline = false;
 
         // Éléments DOM
         const starterDisplay = document.getElementById("starter");
@@ -311,69 +322,142 @@
         const onlineStatus = document.getElementById("online-status");
         const refreshButton = document.getElementById("refresh-scores");
 
-        // Fonctions API
+        // Fonctions API améliorées
         async function loadScoresFromAPI() {
             try {
-                onlineStatus.textContent = '🔄 Chargement...';
+                onlineStatus.textContent = '🔄 Connexion...';
                 onlineStatus.style.background = '#ffa502';
+                onlineStatus.style.color = 'white';
                 
-                const response = await fetch(API_URL);
-                if (!response.ok) throw new Error('Erreur réseau');
+                console.log('Tentative de connexion à:', API_URL);
+                
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+                
+                const response = await fetch(API_URL, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 
                 const scores = await response.json();
-                gameHistory = scores.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                console.log('Scores reçus:', scores);
+                
+                gameHistory = Array.isArray(scores) ? scores.sort((a, b) => {
+                    // Trier par score décroissant, puis par date
+                    if (b.score !== a.score) return b.score - a.score;
+                    return new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date);
+                }) : [];
                 
                 onlineStatus.textContent = '🟢 En ligne';
                 onlineStatus.style.background = '#2ed573';
                 isOnline = true;
                 
+                console.log('✅ Connexion réussie! Scores chargés:', gameHistory.length);
                 displayScoreHistory();
+                
             } catch (error) {
-                console.error('Erreur chargement scores:', error);
-                onlineStatus.textContent = '🔴 Hors ligne';
+                console.error('❌ Erreur API:', error);
+                
+                let errorMsg = '🔴 Hors ligne';
+                if (error.name === 'AbortError') {
+                    errorMsg = '🔴 Timeout';
+                } else if (error.message.includes('fetch')) {
+                    errorMsg = '🔴 Pas d\'internet';
+                } else if (error.message.includes('404')) {
+                    errorMsg = '🔴 API introuvable';
+                }
+                
+                onlineStatus.textContent = errorMsg;
                 onlineStatus.style.background = '#ff4757';
                 isOnline = false;
                 
                 // Charger les scores locaux en fallback
                 gameHistory = JSON.parse(localStorage.getItem('rocketGameHistory') || '[]');
                 displayScoreHistory();
+                
+                // Afficher les instructions pour créer son API
+                if (gameHistory.length === 0) {
+                    showAPIInstructions();
+                }
             }
         }
 
         async function saveScoreToAPI(scoreData) {
             try {
+                console.log('Sauvegarde du score:', scoreData);
+                
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                
                 const response = await fetch(API_URL, {
                     method: 'POST',
+                    signal: controller.signal,
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(scoreData)
                 });
                 
-                if (!response.ok) throw new Error('Erreur sauvegarde');
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 
                 const savedScore = await response.json();
+                console.log('✅ Score sauvegardé:', savedScore);
                 
                 // Recharger les scores après sauvegarde
                 await loadScoresFromAPI();
                 
                 return savedScore;
+                
             } catch (error) {
-                console.error('Erreur sauvegarde score:', error);
+                console.error('❌ Erreur sauvegarde:', error);
                 
                 // Sauvegarde locale en fallback
                 const localHistory = JSON.parse(localStorage.getItem('rocketGameHistory') || '[]');
                 localHistory.unshift(scoreData);
-                if (localHistory.length > 15) {
-                    localHistory.splice(15);
+                if (localHistory.length > 20) {
+                    localHistory.splice(20);
                 }
                 localStorage.setItem('rocketGameHistory', JSON.stringify(localHistory));
+                gameHistory = localHistory;
+                displayScoreHistory();
                 
-                onlineStatus.textContent = '🔴 Hors ligne';
-                onlineStatus.style.background = '#ff4757';
-                isOnline = false;
+                onlineStatus.textContent = '🔴 Sauvé localement';
+                onlineStatus.style.background = '#ff9500';
                 
                 throw error;
+            }
+        }
+
+        function showAPIInstructions() {
+            const instructions = `
+                <div style="text-align: left; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; margin: 10px 0;">
+                    <h4>🔧 Créer votre API MockAPI :</h4>
+                    <ol style="margin: 10px 0; padding-left: 20px;">
+                        <li>Allez sur <a href="https://mockapi.io" target="_blank" style="color: #4ecdc4;">mockapi.io</a></li>
+                        <li>Créez un compte gratuit</li>
+                        <li>Créez un nouveau projet</li>
+                        <li>Ajoutez une ressource "scores"</li>
+                        <li>Copiez l'URL dans le code</li>
+                    </ol>
+                    <p><small>En attendant, vos scores sont sauvés localement !</small></p>
+                </div>
+            `;
+            
+            if (scoreHistoryDisplay.innerHTML.includes('Aucun score')) {
+                scoreHistoryDisplay.innerHTML = instructions;
             }
         }
 
