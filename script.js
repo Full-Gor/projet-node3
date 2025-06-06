@@ -2,12 +2,10 @@ let score = 0;
 let timeLeft = 5; 
 let timerRunning = false;
 
-// Sélection des éléments HTML
 const scoreDisplay = document.getElementById("score");
 const timerDisplay = document.getElementById("timer");
 const button = document.getElementById("clickButton");
 
-// Fonction de mise à jour du score
 function incrementScore() {
     if (timerRunning) {  
         score++;
@@ -15,9 +13,8 @@ function incrementScore() {
     }
 }
 
-// Fonction de démarrage du chrono
 function startTimer() {
-    if (timerRunning) return; // Empêcher de relancer le chrono
+    if (timerRunning) return;
 
     timerRunning = true;
     let interval = setInterval(() => {
@@ -25,13 +22,12 @@ function startTimer() {
         timerDisplay.textContent = "Temps restant : " + timeLeft + "s";
 
         if (timeLeft <= 0) {
-            clearInterval(interval); // Arrêter le chrono
+            clearInterval(interval); 
             timerDisplay.textContent = "⏳ Temps écoulé !";
-            button.disabled = true; // Désactiver le bouton
+            button.disabled = true; 
         }
     }, 1000);
 }
 
-// Événements
 button.addEventListener("click", incrementScore);
 window.addEventListener("load", startTimer);
