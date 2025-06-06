@@ -1,33 +1,36 @@
 let score = 0;
-let timeLeft = 5; 
-let timerRunning = false;
+let rocketPosition = 0;
+let gameStarted = false;
 
-const scoreDisplay = document.getElementById("score");
-const timerDisplay = document.getElementById("timer");
+// Sélectionner les éléments HTML
+const starterDisplay = document.getElementById("starter");
+const rocket = document.getElementById("rocket");
+const confetti = document.getElementById("confetti");
 const button = document.getElementById("clickButton");
 
-function incrementScore() {
-    if (timerRunning) {  
-        score++;
-        scoreDisplay.textContent = "Score : " + score;
+// 🔥 Déclencher le feu de départ avant de jouer
+function startGame() {
+    starterDisplay.textContent = "🟥";
+    setTimeout(() => starterDisplay.textContent = "🟨", 1000);
+    setTimeout(() => {
+        starterDisplay.textContent = "🟩";
+        button.disabled = false; // Active le bouton
+        gameStarted = true;
+    }, 2000);
+}
+
+// 🚀 Augmenter la hauteur de la fusée
+function moveRocket() {
+    if (!gameStarted) return;
+
+    rocketPosition += 20; // La fusée monte
+    rocket.style.bottom = rocketPosition + "px";
+
+    if (rocketPosition >= 450) { // Si elle dépasse la ligne d'arrivée
+        confetti.style.display = "block"; // Afficher les confettis 🎊
     }
 }
 
-function startTimer() {
-    if (timerRunning) return;
-
-    timerRunning = true;
-    let interval = setInterval(() => {
-        timeLeft--;
-        timerDisplay.textContent = "Temps restant : " + timeLeft + "s";
-
-        if (timeLeft <= 0) {
-            clearInterval(interval); 
-            timerDisplay.textContent = "⏳ Temps écoulé !";
-            button.disabled = true; 
-        }
-    }, 1000);
-}
-
-button.addEventListener("click", incrementScore);
-window.addEventListener("load", startTimer);
+// Écoute des événements
+window.addEventListener("load", startGame);
+button.addEventListener("click", moveRocket);
